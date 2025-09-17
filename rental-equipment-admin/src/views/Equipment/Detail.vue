@@ -1,0 +1,944 @@
+<template>
+  <div class="equipment-detail-container">
+    <!-- 页面头部 -->
+    <div class="page-header">
+      <div class="header-left">
+        <el-button @click="goBack" type="text">
+          <el-icon><ArrowLeft /></el-icon>
+          返回设备列表
+        </el-button>
+        <h2 class="page-title">设备详情</h2>
+      </div>
+      <div class="header-right">
+        <el-button-group v-if="equipmentDetail">
+          <el-button type="primary" @click="editEquipment">
+            <el-icon><Edit /></el-icon>
+            编辑设备
+          </el-button>
+          <el-button @click="viewMaintenanceRecords">
+            <el-icon><Tools /></el-icon>
+            维护记录
+          </el-button>
+          <el-button @click="generateQRCode">
+            <el-icon><Expand /></el-icon>
+            生成二维码
+          </el-button>
+          <el-dropdown trigger="click" @command="handleAction">
+            <el-button>
+              更多操作
+              <el-icon><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="clone">复制设备</el-dropdown-item>
+                <el-dropdown-item command="export">导出信息</el-dropdown-item>
+                <el-dropdown-item command="print">打印标签</el-dropdown-item>
+                <el-dropdown-item command="delete" divided>删除设备</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </el-button-group>
+      </div>
+    </div>
+
+    <!-- 加载状态 -->
+    <div v-loading="loading" class="loading-container" v-if="loading">
+      <div style="height: 400px;"></div>
+    </div>
+
+    <!-- 设备信息 -->
+    <div v-else-if="equipmentDetail" class="equipment-content">
+      <!-- 基本信息卡片 -->
+      <el-card class="info-card" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <span class="card-title">基本信息</span>
+            <el-tag 
+              :type="getStatusTagType(equipmentDetail.status)" 
+              size="large"
+            >
+              {{ getStatusText(equipmentDetail.status) }}
+            </el-tag>
+          </div>
+        </template>
+        
+        <el-row :gutter="30">
+          <el-col :xs="24" :md="16">
+            <el-row :gutter="20">
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>设备编号:</label>
+                  <span class="equipment-code">{{ equipmentDetail.code }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>设备名称:</label>
+                  <span>{{ equipmentDetail.name }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>设备型号:</label>
+                  <span>{{ equipmentDetail.model }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>设备分类:</label>
+                  <el-tag :type="getCategoryTagType(equipmentDetail.category)">
+                    {{ getCategoryText(equipmentDetail.category) }}
+                  </el-tag>
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>所在仓库:</label>
+                  <span>{{ equipmentDetail.warehouse }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>日租金:</label>
+                  <span class="price">¥{{ equipmentDetail.dailyRate.toLocaleString() }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>采购价格:</label>
+                  <span class="price">¥{{ equipmentDetail.purchasePrice.toLocaleString() }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>采购日期:</label>
+                  <span>{{ formatDate(equipmentDetail.purchaseDate) }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>保修到期:</label>
+                  <span>{{ formatDate(equipmentDetail.warrantyExpiry) }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>最后维护:</label>
+                  <span>{{ formatDate(equipmentDetail.lastMaintenanceDate) }}</span>
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="12">
+                <div class="info-item">
+                  <label>供应商:</label>
+                  <span>{{ equipmentDetail.supplier }}</span>
+                </div>
+              </el-col>
+            </el-row>
+          </el-col>
+          <el-col :xs="24" :md="8">
+            <div class="equipment-image">
+              <el-image
+                :src="equipmentDetail.image"
+                fit="cover"
+                style="width: 100%; height: 200px; border-radius: 8px;"
+              >
+                <template #error>
+                  <div class="image-placeholder">
+                    <el-icon><Picture /></el-icon>
+                    <div>暂无图片</div>
+                  </div>
+                </template>
+              </el-image>
+            </div>
+          </el-col>
+        </el-row>
+      </el-card>
+
+      <!-- 技术规格 -->
+      <el-card class="info-card" shadow="never">
+        <template #header>
+          <span class="card-title">技术规格</span>
+        </template>
+        
+        <div class="specifications">
+          <el-row :gutter="20">
+            <el-col 
+              :xs="24" :sm="12" :md="8" :lg="6"
+              v-for="(spec, key) in equipmentDetail.specifications" 
+              :key="key"
+            >
+              <div class="spec-item">
+                <label>{{ key }}:</label>
+                <span>{{ spec }}</span>
+              </div>
+            </el-col>
+          </el-row>
+          <div v-if="!Object.keys(equipmentDetail.specifications).length" class="empty-specs">
+            暂无技术规格信息
+          </div>
+        </div>
+      </el-card>
+
+      <!-- 使用统计 -->
+      <el-card class="info-card" shadow="never">
+        <template #header>
+          <span class="card-title">使用统计</span>
+        </template>
+        
+        <div class="usage-stats">
+          <el-row :gutter="20">
+            <el-col :xs="12" :sm="6" :md="3">
+              <div class="stat-item">
+                <div class="stat-value">{{ usageStats.totalOrders }}</div>
+                <div class="stat-label">累计租赁次数</div>
+              </div>
+            </el-col>
+            <el-col :xs="12" :sm="6" :md="3">
+              <div class="stat-item">
+                <div class="stat-value">{{ usageStats.totalDays }}</div>
+                <div class="stat-label">累计租赁天数</div>
+              </div>
+            </el-col>
+            <el-col :xs="12" :sm="6" :md="3">
+              <div class="stat-item">
+                <div class="stat-value">¥{{ usageStats.totalRevenue.toLocaleString() }}</div>
+                <div class="stat-label">累计收入</div>
+              </div>
+            </el-col>
+            <el-col :xs="12" :sm="6" :md="3">
+              <div class="stat-item">
+                <div class="stat-value">{{ usageStats.maintenanceCount }}</div>
+                <div class="stat-label">维护次数</div>
+              </div>
+            </el-col>
+          </el-row>
+        </div>
+      </el-card>
+
+      <!-- 最近维护记录 -->
+      <el-card class="info-card" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <span class="card-title">最近维护记录</span>
+            <el-button type="text" @click="viewMaintenanceRecords">
+              查看全部
+            </el-button>
+          </div>
+        </template>
+        
+        <el-table :data="recentMaintenanceRecords" stripe>
+          <el-table-column prop="date" label="维护日期" width="120">
+            <template #default="{ row }">
+              {{ formatDate(row.date) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="type" label="维护类型" width="100" />
+          <el-table-column prop="description" label="维护内容" show-overflow-tooltip />
+          <el-table-column prop="cost" label="维护费用" width="100">
+            <template #default="{ row }">
+              <span class="price">¥{{ row.cost.toLocaleString() }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="technician" label="维护人员" width="100" />
+        </el-table>
+        
+        <div v-if="recentMaintenanceRecords.length === 0" class="empty-maintenance">
+          暂无维护记录
+        </div>
+      </el-card>
+
+      <!-- 设备描述 -->
+      <el-card class="info-card" shadow="never">
+        <template #header>
+          <span class="card-title">设备描述</span>
+        </template>
+        
+        <div class="equipment-description">
+          {{ equipmentDetail.description || '暂无设备描述' }}
+        </div>
+      </el-card>
+
+      <!-- 操作历史 -->
+      <el-card class="info-card" shadow="never">
+        <template #header>
+          <span class="card-title">操作历史</span>
+        </template>
+        
+        <el-timeline>
+          <el-timeline-item
+            v-for="(item, index) in operationHistory"
+            :key="index"
+            :timestamp="item.timestamp"
+            placement="top"
+          >
+            <el-card>
+              <h4>{{ item.operation }}</h4>
+              <p>{{ item.description }}</p>
+              <p style="color: #999; font-size: 12px;">操作人: {{ item.operator }}</p>
+            </el-card>
+          </el-timeline-item>
+        </el-timeline>
+      </el-card>
+
+      <!-- 相关文档 -->
+      <el-card class="info-card" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <span class="card-title">相关文档</span>
+            <el-button type="primary" size="small">
+              <el-icon><Plus /></el-icon>
+              上传文档
+            </el-button>
+          </div>
+        </template>
+        
+        <div class="document-list">
+          <div v-for="doc in relatedDocuments" :key="doc.id" class="document-item">
+            <el-icon><Document /></el-icon>
+            <span class="doc-name">{{ doc.name }}</span>
+            <span class="doc-category">{{ doc.category }}</span>
+            <span class="doc-size">{{ doc.size }}</span>
+            <el-button type="text" size="small" @click="downloadDocument(doc)">下载</el-button>
+          </div>
+          <div v-if="relatedDocuments.length === 0" class="empty-documents">
+            暂无相关文档
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <!-- 错误状态 -->
+    <div v-else class="error-container">
+      <el-result
+        icon="warning"
+        title="设备不存在"
+        sub-title="请检查设备ID是否正确或联系管理员"
+      >
+        <template #extra>
+          <el-button type="primary" @click="goBack">返回设备列表</el-button>
+        </template>
+      </el-result>
+    </div>
+
+    <!-- 二维码对话框 -->
+    <el-dialog
+      v-model="qrCodeDialogVisible"
+      title="设备二维码"
+      width="400px"
+      center
+    >
+      <div class="qr-code-container">
+        <div ref="qrCodeRef" class="qr-code"></div>
+        <div class="qr-code-info">
+          <p>设备编号: {{ equipmentDetail?.code }}</p>
+          <p>设备名称: {{ equipmentDetail?.name }}</p>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="qrCodeDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="downloadQRCode">下载二维码</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { 
+  ArrowLeft, 
+  Edit, 
+  Tools, 
+  Expand, 
+  ArrowDown, 
+  Picture,
+  Document,
+  Plus
+} from '@element-plus/icons-vue'
+import { EquipmentStatus, EquipmentCategory } from '@/types/equipment'
+import type { Equipment, EquipmentStatusType, EquipmentCategoryType } from '@/types/equipment'
+
+const route = useRoute()
+const router = useRouter()
+
+// 响应式数据
+const loading = ref(false)
+const equipmentDetail = ref<Equipment | null>(null)
+const qrCodeDialogVisible = ref(false)
+const qrCodeRef = ref<HTMLElement>()
+
+// 使用统计数据
+const usageStats = ref({
+  totalOrders: 45,
+  totalDays: 892,
+  totalRevenue: 1340000,
+  maintenanceCount: 8
+})
+
+// 最近维护记录
+const recentMaintenanceRecords = ref([
+  {
+    date: '2023-12-01',
+    type: '定期保养',
+    description: '更换机油、滤芯，检查液压系统',
+    cost: 2800,
+    technician: '张师傅'
+  },
+  {
+    date: '2023-10-15',
+    type: '故障维修',
+    description: '修复液压泵故障，更换密封件',
+    cost: 5200,
+    technician: '李师傅'
+  },
+  {
+    date: '2023-08-20',
+    type: '定期保养',
+    description: '更换液压油，清洁散热器',
+    cost: 1800,
+    technician: '王师傅'
+  }
+])
+
+// 操作历史
+const operationHistory = ref([
+  {
+    timestamp: '2023-12-15 14:30:00',
+    operation: '设备租出',
+    description: '设备已租给北京建筑公司，租期30天，日租金1500元',
+    operator: '张小明'
+  },
+  {
+    timestamp: '2023-12-01 09:15:00',
+    operation: '维护完成',
+    description: '定期保养完成，更换机油、滤芯，设备状态良好',
+    operator: '张师傅'
+  },
+  {
+    timestamp: '2023-11-28 16:20:00',
+    operation: '维护开始',
+    description: '设备进入维护状态，进行定期保养',
+    operator: '系统自动'
+  },
+  {
+    timestamp: '2023-11-25 10:00:00',
+    operation: '设备归还',
+    description: '上海工程公司归还设备，设备检查完毕无损坏',
+    operator: '李小红'
+  },
+  {
+    timestamp: '2023-10-20 08:30:00',
+    operation: '设备租出',
+    description: '设备已租给上海工程公司，租期35天，日租金1500元',
+    operator: '王小强'
+  },
+  {
+    timestamp: '2023-10-15 15:45:00',
+    operation: '故障维修完成',
+    description: '液压泵故障已修复，设备恢复正常使用',
+    operator: '李师傅'
+  },
+  {
+    timestamp: '2023-10-10 11:20:00',
+    operation: '故障报告',
+    description: '设备液压系统出现异常，需要维修',
+    operator: '客户反馈'
+  },
+  {
+    timestamp: '2023-09-01 14:00:00',
+    operation: '设备入库',
+    description: '新设备采购完成，已通过验收并入库',
+    operator: '采购部门'
+  }
+])
+
+// 相关文档
+const relatedDocuments = ref([
+  {
+    id: 1,
+    name: '设备操作手册.pdf',
+    size: '2.3MB',
+    type: 'pdf',
+    uploadTime: '2023-09-01',
+    category: '操作手册'
+  },
+  {
+    id: 2,
+    name: '维护保养指南.pdf',
+    size: '1.8MB',
+    type: 'pdf',
+    uploadTime: '2023-09-01',
+    category: '维护手册'
+  },
+  {
+    id: 3,
+    name: '设备检验证书.jpg',
+    size: '0.5MB',
+    type: 'image',
+    uploadTime: '2023-09-01',
+    category: '证书文件'
+  },
+  {
+    id: 4,
+    name: '采购合同.pdf',
+    size: '1.2MB',
+    type: 'pdf',
+    uploadTime: '2023-08-15',
+    category: '合同文件'
+  },
+  {
+    id: 5,
+    name: '设备技术参数表.xlsx',
+    size: '0.3MB',
+    type: 'excel',
+    uploadTime: '2023-09-01',
+    category: '技术文档'
+  }
+])
+
+// 方法
+const loadEquipmentDetail = async () => {
+  loading.value = true
+  try {
+    const equipmentId = route.params.id as string
+    
+    // TODO: 调用API获取设备详情
+    // const response = await getEquipmentDetail(equipmentId)
+    // equipmentDetail.value = response.data
+    
+    // 模拟数据
+    equipmentDetail.value = {
+      id: equipmentId,
+      code: 'EQ20240001',
+      name: '挖掘机CAT320D',
+      model: 'CAT320D',
+      category: EquipmentCategory.EXCAVATOR,
+      status: EquipmentStatus.AVAILABLE,
+      dailyRate: 1500,
+      purchasePrice: 980000,
+      warehouse: '北京仓库',
+      purchaseDate: '2023-01-15',
+      warrantyExpiry: '2025-01-15',
+      lastMaintenanceDate: '2023-12-01',
+      image: '/images/equipment/cat320d.jpg',
+      specifications: {
+        '发动机功率': '121kW',
+        '工作重量': '20.2t',
+        '斗容量': '0.93m³',
+        '最大挖掘深度': '6.53m',
+        '最大挖掘半径': '9.66m',
+        '最大卸载高度': '6.68m'
+      },
+      supplier: '卡特彼勒(中国)',
+      description: '大型履带式挖掘机，适用于各种土方作业。配备先进的液压系统和智能控制技术，作业效率高，燃油经济性好。适合大型工程项目使用。'
+    }
+  } catch (error) {
+    ElMessage.error('加载设备详情失败')
+    console.error('Load equipment detail error:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+const goBack = () => {
+  router.push('/equipment/list')
+}
+
+const editEquipment = () => {
+  if (equipmentDetail.value) {
+    router.push(`/equipment/edit/${equipmentDetail.value.id}`)
+  }
+}
+
+const viewMaintenanceRecords = () => {
+  if (equipmentDetail.value) {
+    router.push(`/equipment/${equipmentDetail.value.id}/maintenance`)
+  }
+}
+
+const generateQRCode = () => {
+  qrCodeDialogVisible.value = true
+  // TODO: 生成二维码
+  // nextTick(() => {
+  //   if (qrCodeRef.value) {
+  //     // 使用二维码库生成二维码
+  //   }
+  // })
+}
+
+const downloadQRCode = () => {
+  // TODO: 下载二维码
+  ElMessage.success('二维码下载成功')
+}
+
+const downloadDocument = (doc: any) => {
+  // TODO: 实现文档下载功能
+  ElMessage.success(`正在下载 ${doc.name}`)
+}
+
+const handleAction = async (command: string) => {
+  switch (command) {
+    case 'clone':
+      ElMessage.info('复制设备功能开发中')
+      break
+    case 'export':
+      ElMessage.info('导出设备信息功能开发中')
+      break
+    case 'print':
+      ElMessage.info('打印设备标签功能开发中')
+      break
+    case 'delete':
+      await handleDelete()
+      break
+  }
+}
+
+const handleDelete = async () => {
+  if (!equipmentDetail.value) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除设备 ${equipmentDetail.value.code} 吗？删除后不可恢复。`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    // TODO: 调用删除设备API
+    ElMessage.success('设备删除成功')
+    goBack()
+  } catch (error) {
+    // 用户取消操作
+  }
+}
+
+const getStatusText = (status: EquipmentStatus) => {
+  const statusMap = {
+    [EquipmentStatus.AVAILABLE]: '可用',
+    [EquipmentStatus.RENTED]: '租出',
+    [EquipmentStatus.MAINTENANCE]: '维修中',
+    [EquipmentStatus.OUT_OF_SERVICE]: '停用'
+  }
+  return statusMap[status] || '未知'
+}
+
+const getStatusTagType = (status: EquipmentStatus) => {
+  const typeMap = {
+    [EquipmentStatus.AVAILABLE]: 'success',
+    [EquipmentStatus.RENTED]: 'warning',
+    [EquipmentStatus.MAINTENANCE]: 'danger',
+    [EquipmentStatus.OUT_OF_SERVICE]: 'info'
+  }
+  return typeMap[status] || 'info'
+}
+
+const getCategoryText = (category: EquipmentCategory) => {
+  const categoryMap = {
+    [EquipmentCategory.EXCAVATOR]: '挖掘机械',
+    [EquipmentCategory.CRANE]: '起重机械',
+    [EquipmentCategory.EARTHMOVING]: '铲土运输',
+    [EquipmentCategory.COMPACTOR]: '压实机械',
+    [EquipmentCategory.CONCRETE]: '混凝土机械',
+    [EquipmentCategory.PILING]: '桩工机械',
+    [EquipmentCategory.OTHER]: '其他设备'
+  }
+  return categoryMap[category] || '未知'
+}
+
+const getCategoryTagType = (category: EquipmentCategory) => {
+  const typeMap = {
+    [EquipmentCategory.EXCAVATOR]: 'primary',
+    [EquipmentCategory.CRANE]: 'success',
+    [EquipmentCategory.EARTHMOVING]: 'warning',
+    [EquipmentCategory.COMPACTOR]: 'info',
+    [EquipmentCategory.CONCRETE]: 'danger',
+    [EquipmentCategory.PILING]: '',
+    [EquipmentCategory.OTHER]: 'info'
+  }
+  return typeMap[category] || 'info'
+}
+
+const formatDate = (dateStr: string) => {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleDateString('zh-CN')
+}
+
+// 生命周期
+onMounted(() => {
+  loadEquipmentDetail()
+})
+</script>
+
+<style lang="scss" scoped>
+.equipment-detail-container {
+  padding: 20px;
+  min-height: 100%;
+  
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    position: sticky;
+    top: -20px;
+    background-color: #f0f2f5;
+    z-index: 10;
+    padding: 20px 0;
+    margin: -20px 0 20px 0;
+    
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      
+      .page-title {
+        margin: 0;
+        font-size: 24px;
+        color: #333;
+      }
+    }
+  }
+  
+  .loading-container {
+    min-height: 400px;
+  }
+  
+  .equipment-content {
+    .info-card {
+      margin-bottom: 20px;
+      
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        
+        .card-title {
+          font-size: 16px;
+          font-weight: bold;
+          color: #333;
+        }
+      }
+      
+      .info-item {
+        margin-bottom: 15px;
+        
+        label {
+          display: inline-block;
+          width: 100px;
+          color: #666;
+          font-weight: 500;
+        }
+        
+        .equipment-code {
+          color: #409EFF;
+          font-weight: bold;
+        }
+        
+        .price {
+          color: #67C23A;
+          font-weight: bold;
+        }
+      }
+      
+      .equipment-image {
+        .image-placeholder {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          height: 200px;
+          background: #f5f7fa;
+          color: #999;
+          border-radius: 8px;
+          
+          div {
+            margin-top: 8px;
+            font-size: 14px;
+          }
+        }
+      }
+      
+      .specifications {
+        .spec-item {
+          margin-bottom: 15px;
+          
+          label {
+            display: inline-block;
+            width: 120px;
+            color: #666;
+            font-weight: 500;
+          }
+        }
+        
+        .empty-specs {
+          text-align: center;
+          color: #999;
+          padding: 40px 0;
+          font-size: 14px;
+        }
+      }
+      
+      .usage-stats {
+        .stat-item {
+          text-align: center;
+          padding: 20px;
+          border: 1px solid #e4e7ed;
+          border-radius: 8px;
+          
+          .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #409EFF;
+            margin-bottom: 8px;
+          }
+          
+          .stat-label {
+            font-size: 14px;
+            color: #666;
+          }
+        }
+      }
+      
+      .empty-maintenance {
+        text-align: center;
+        color: #999;
+        padding: 40px 0;
+        font-size: 14px;
+      }
+      
+      .equipment-description {
+        line-height: 1.8;
+        color: #666;
+        padding: 15px;
+        background: #f8f9fa;
+        border-radius: 4px;
+      }
+      
+      .document-list {
+        .document-item {
+          display: flex;
+          align-items: center;
+          padding: 12px 16px;
+          border: 1px solid #e4e7ed;
+          border-radius: 8px;
+          margin-bottom: 12px;
+          transition: all 0.3s;
+          
+          &:hover {
+            background-color: #f5f7fa;
+            border-color: #409EFF;
+          }
+          
+          .el-icon {
+            font-size: 20px;
+            color: #409EFF;
+            margin-right: 12px;
+          }
+          
+          .doc-name {
+            flex: 1;
+            font-weight: 500;
+            color: #333;
+            margin-right: 12px;
+          }
+          
+          .doc-size {
+            color: #999;
+            font-size: 12px;
+            margin-right: 12px;
+            min-width: 50px;
+          }
+          
+          .doc-category {
+            background: #f0f2f5;
+            color: #606266;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-right: 12px;
+          }
+        }
+        
+        .empty-documents {
+          text-align: center;
+          color: #999;
+          padding: 40px 0;
+          font-size: 14px;
+        }
+      }
+    }
+  }
+  
+  .error-container {
+    padding: 40px 0;
+  }
+  
+  .qr-code-container {
+    text-align: center;
+    
+    .qr-code {
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: center;
+    }
+    
+    .qr-code-info {
+      p {
+        margin: 5px 0;
+        color: #666;
+      }
+    }
+  }
+}
+
+// 响应式适配
+@media (max-width: 768px) {
+  .equipment-detail-container {
+    padding: 10px;
+    
+    .page-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 15px;
+      
+      .header-left {
+        justify-content: space-between;
+        
+        .page-title {
+          font-size: 20px;
+        }
+      }
+      
+      .header-right {
+        .el-button-group {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+      }
+    }
+    
+    .equipment-content {
+      .info-card {
+        .info-item {
+          label {
+            width: 80px;
+            font-size: 14px;
+          }
+        }
+        
+        .usage-stats {
+          .el-col {
+            margin-bottom: 15px;
+          }
+        }
+      }
+    }
+  }
+}
+</style>
